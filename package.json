@@ -1,0 +1,24 @@
+{
+  "name": "post-matcher",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postMatcher": "ts-node src/postMatcher.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.5.1",
+    "chalk": "^5.4.1",
+    "glob": "^11.0.2",
+    "gray-matter": "^4.0.3",
+    "remark": "^15.0.1",
+    "strip-markdown": "^6.0.0"
+  }
+}

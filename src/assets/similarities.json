@@ -1,0 +1,152 @@
+{
+  "vue-introduction": [
+    {
+      "slug": "typescript-advanced-types",
+      "title": "Advanced Types in TypeScript",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/typescript-advanced-types.md",
+      "similarity": 0.35
+    },
+    {
+      "slug": "typescript-generics",
+      "title": "Generics in TypeScript",
+      "date": "2024-06-05T00:00:00.000Z",
+      "path": "src/content/typescript-generics.md",
+      "similarity": 0.32
+    },
+    {
+      "slug": "animal-facts",
+      "title": "The Fascinating World of Animals",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/animals.md",
+      "similarity": 0.22
+    },
+    {
+      "slug": "cat-facts",
+      "title": "All About Cats",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/cat.md",
+      "similarity": 0.2
+    }
+  ],
+  "typescript-generics": [
+    {
+      "slug": "typescript-advanced-types",
+      "title": "Advanced Types in TypeScript",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/typescript-advanced-types.md",
+      "similarity": 0.61
+    },
+    {
+      "slug": "vue-introduction",
+      "title": "Introduction to Vue.js",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/vue.md",
+      "similarity": 0.32
+    },
+    {
+      "slug": "animal-facts",
+      "title": "The Fascinating World of Animals",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/animals.md",
+      "similarity": 0.18
+    },
+    {
+      "slug": "cat-facts",
+      "title": "All About Cats",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/cat.md",
+      "similarity": 0.17
+    }
+  ],
+  "typescript-advanced-types": [
+    {
+      "slug": "typescript-generics",
+      "title": "Generics in TypeScript",
+      "date": "2024-06-05T00:00:00.000Z",
+      "path": "src/content/typescript-generics.md",
+      "similarity": 0.61
+    },
+    {
+      "slug": "cat-facts",
+      "title": "All About Cats",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/cat.md",
+      "similarity": 0.36
+    },
+    {
+      "slug": "vue-introduction",
+      "title": "Introduction to Vue.js",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/vue.md",
+      "similarity": 0.35
+    },
+    {
+      "slug": "animal-facts",
+      "title": "The Fascinating World of Animals",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/animals.md",
+      "similarity": 0.34
+    }
+  ],
+  "cat-facts": [
+    {
+      "slug": "animal-facts",
+      "title": "The Fascinating World of Animals",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/animals.md",
+      "similarity": 0.51
+    },
+    {
+      "slug": "typescript-advanced-types",
+      "title": "Advanced Types in TypeScript",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/typescript-advanced-types.md",
+      "similarity": 0.36
+    },
+    {
+      "slug": "vue-introduction",
+      "title": "Introduction to Vue.js",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/vue.md",
+      "similarity": 0.2
+    },
+    {
+      "slug": "typescript-generics",
+      "title": "Generics in TypeScript",
+      "date": "2024-06-05T00:00:00.000Z",
+      "path": "src/content/typescript-generics.md",
+      "similarity": 0.17
+    }
+  ],
+  "animal-facts": [
+    {
+      "slug": "cat-facts",
+      "title": "All About Cats",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/cat.md",
+      "similarity": 0.51
+    },
+    {
+      "slug": "typescript-advanced-types",
+      "title": "Advanced Types in TypeScript",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/typescript-advanced-types.md",
+      "similarity": 0.34
+    },
+    {
+      "slug": "vue-introduction",
+      "title": "Introduction to Vue.js",
+      "date": "2024-06-03T00:00:00.000Z",
+      "path": "src/content/vue.md",
+      "similarity": 0.22
+    },
+    {
+      "slug": "typescript-generics",
+      "title": "Generics in TypeScript",
+      "date": "2024-06-05T00:00:00.000Z",
+      "path": "src/content/typescript-generics.md",
+      "similarity": 0.18
+    }
+  ]
+}
