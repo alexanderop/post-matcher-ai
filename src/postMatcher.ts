@@ -11,7 +11,7 @@ import path from 'path';
 const GLOB = 'src/content/**/*.{md,mdx}';              // Where to find Markdown content
 const OUT = 'src/assets/similarities.json';             // Output file for results
 const TOP_N = 5;                                        // Number of similar docs to keep
-const MODEL = 'Snowflake/snowflake-arctic-embed-m-v2.0';// Embedding model
+const MODEL = 'mixedbread-ai/mxbai-embed-large-v1';// Embedding model
 
 // --------- Type Definitions ---------
 interface Frontmatter { slug: string; [k: string]: unknown }
