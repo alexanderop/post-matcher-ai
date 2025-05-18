@@ -7,283 +7,155 @@ import { remark } from 'remark';
 import strip from 'strip-markdown';
 import path from 'path';
 
-const CONTENT_GLOB_PATTERN = 'src/content/**/*.{md,mdx}';
-const SIMILARITIES_OUTPUT_PATH = 'src/assets/similarities.json';
-const TOP_N_RESULTS = 5;
-const FEATURE_EXTRACTOR_MODEL_NAME = 'Snowflake/snowflake-arctic-embed-m-v2.0';
+// --------- Configurations ---------
+const GLOB = 'src/content/**/*.{md,mdx}';              // Where to find Markdown content
+const OUT = 'src/assets/similarities.json';             // Output file for results
+const TOP_N = 5;                                        // Number of similar docs to keep
+const MODEL = 'Snowflake/snowflake-arctic-embed-m-v2.0';// Embedding model
 
-interface Frontmatter {
-  slug: string;
-  // Add other known/expected frontmatter properties here for better type safety
-  // e.g., title?: string; date?: string;
-  [key: string]: unknown; // Use unknown for other dynamic properties
+// --------- Type Definitions ---------
+interface Frontmatter { slug: string; [k: string]: unknown }
+interface Document { path: string; content: string; frontmatter: Frontmatter }
+interface SimilarityResult extends Frontmatter { path: string; similarity: number }
+
+// --------- Utils ---------
+
+/**
+ * Normalizes a vector to unit length (L2 norm == 1)
+ * This makes cosine similarity a simple dot product!
+ */
+function normalize(vec: Float32Array): Float32Array {
+  let len = Math.hypot(...vec);         // L2 norm
+  if (!len) return vec;
+  return new Float32Array(vec.map(x => x / len));
 }
 
-interface Document {
-  path: string;
-  content: string; // Plain text content after strip-markdown
-  frontmatter: Frontmatter;
-}
+/**
+ * Computes dot product of two same-length vectors.
+ * Vectors MUST be normalized before using this for cosine similarity!
+ */
+const dot = (a: Float32Array, b: Float32Array) => a.reduce((sum, ai, i) => sum + ai * b[i], 0);
 
-// SimilarityResult includes properties from the target document's frontmatter,
-// plus the path of the similar document and the similarity score.
-interface SimilarityResult extends Frontmatter {
-  path: string;
-  similarity: number;
-}
+/**
+ * Strips markdown formatting, import/export lines, headings, tables, etc.
+ * Returns plain text for semantic analysis.
+ */
+const getPlainText = async (md: string) => {
+  let txt = String(await remark().use(strip).process(md))
+    .replace(/^import .*?$/gm, '')
+    .replace(/^export .*?$/gm, '')
+    .replace(/^\s*(TLDR|Introduction|Conclusion|Summary|Quick Setup Guide|Rules?)\s*$/gim, '')
+    .replace(/^[A-Z\s]{4,}$/gm, '')
+    .replace(/^\|.*\|$/gm, '')
+    .replace(/(Rule\s\d+:.*)(?=\s*Rule\s\d+:)/g, '$1\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\n{2}/g, '\n\n')
+    .replace(/\n/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return txt;
+};
 
-// Type for the Hugging Face feature-extraction pipeline result's relevant parts
-interface EmbeddingOutput {
-  dims: number[]; // [numberOfDocuments, embeddingDimension]
-  data: Float32Array;   // Flattened array of all embeddings
-}
-
-// --- Global Extractor ---
-// To be initialized asynchronously in the main execution flow
-let featureExtractor: FeatureExtractionPipeline;
-
-async function runSimilarityAnalysis() {
-    try {
-      featureExtractor = await initializeFeatureExtractor();
-  
-      const filePaths = await glob(CONTENT_GLOB_PATTERN);
-      console.log(chalk.cyan(`Found ${filePaths.length} content files matching pattern: ${CONTENT_GLOB_PATTERN}`));
-  
-      if (filePaths.length === 0) {
-        console.log(chalk.yellow.bold('No content files found. Exiting.'));
-        return;
-      }
-  
-      const documents = await loadAllDocuments(filePaths);
-      if (documents.length === 0) {
-        console.log(chalk.red.bold('No documents were successfully processed. Exiting.'));
-        return;
-      }
-  
-      const embeddings = await generateDocumentEmbeddings(documents, featureExtractor);
-      if (embeddings.length === 0 && documents.length > 0) {
-        // This condition implies an issue in embedding generation if documents were present
-        console.log(chalk.red.bold('Failed to generate embeddings for processed documents. Exiting.'));
-        return;
-      }
-       if (embeddings.length === 0 && documents.length == 0) {
-        console.log(chalk.yellow.bold('No documents to process, so no embeddings generated. Exiting.'));
-        return;
-      }
-  
-  
-      const similarityResults = computeAllSimilarities(documents, embeddings, TOP_N_RESULTS);
-  
-      console.log(chalk.green.bold('Final Results (Top Similar Documents for Each):'));
-      console.log(JSON.stringify(similarityResults, null, 2));
-  
-      await saveResultsToFile(similarityResults, SIMILARITIES_OUTPUT_PATH);
-  
-    } catch (error) {
-      console.error(chalk.red.bold('An unhandled error occurred during the similarity analysis:'), error);
-      process.exitCode = 1; // Indicate failure to the shell
-    }
-}
-
-
-async function getPlainText(markdownContent: string): Promise<string> {
-    const processed = await remark().use(strip).process(markdownContent);
-    let text = String(processed);
-  
-    // Remove import/export lines (they often sneak in at top)
-    text = text.replace(/^import .*?$/gm, '');
-    text = text.replace(/^export .*?$/gm, '');
-  
-    // Remove headings like "Introduction", "TLDR", etc.
-    text = text.replace(/^\s*(TLDR|Introduction|Conclusion|Summary|Quick Setup Guide|Rules?)\s*$/gim, '');
-  
-    // Remove headings in all-caps (common for section labels)
-    text = text.replace(/^[A-Z\s]{4,}$/gm, '');
-  
-    // Remove Markdown tables (if any remain)
-    text = text.replace(/^\|.*\|$/gm, '');
-  
-    // Collapse repeated section markers (e.g. multiple Rule headings)
-    text = text.replace(/(Rule\s\d+:.*)(?=\s*Rule\s\d+:)/g, '$1\n');
-  
-    // Normalize line breaks
-    text = text
-      .replace(/\n{3,}/g, '\n\n')   // excessive breaks to paragraph breaks
-      .replace(/\n{2}/g, '\n\n')    // keep paragraph spacing
-      .replace(/\n/g, ' ')          // all other line breaks to space
-      .replace(/\s{2,}/g, ' ')      // collapse whitespace
-      .trim();
-  
-    return text;
-  }
-
-function cosineSimilarity(vecA: Float32Array, vecB: Float32Array): number {
-  let dotProduct = 0;
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
-  }
-  return dotProduct;
-}
-
-// --- Core Logic Functions ---
-async function processDocumentFile(filePath: string): Promise<Document | null> {
+/**
+ * Parses and validates a single Markdown file.
+ * - Extracts frontmatter (slug, etc.)
+ * - Converts content to plain text
+ * - Skips drafts or files with no slug
+ */
+async function processFile(path: string): Promise<Document | null> {
   try {
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    const { content: markdownContent, data: parsedFrontmatter } = matter(fileContent);
-
-    if (typeof parsedFrontmatter.slug !== 'string' || !parsedFrontmatter.slug) {
-      console.warn(chalk.yellow(`Document at ${filePath} is missing a valid slug. Skipping.`));
-      return null;
-    }
-
-    if (parsedFrontmatter.draft === true) {
-      console.warn(chalk.yellow(`Document at ${filePath} is a draft. Skipping.`));
-      return null;
-    }
-
-    const plainText = await getPlainText(markdownContent);
-    return {
-      path: filePath,
-      content: plainText,
-      frontmatter: parsedFrontmatter as Frontmatter, // Asserting shape after validation
-    };
-  } catch (error) {
-    console.error(chalk.red(`Error processing file ${filePath}:`), error);
-    return null;
-  }
+    const { content, data } = matter(fs.readFileSync(path, 'utf-8'));
+    if (!data.slug || data.draft) return null;
+    const plain = await getPlainText(content);
+    return { path, content: plain, frontmatter: data as Frontmatter };
+  } catch { return null; }
 }
 
-async function loadAllDocuments(filePaths: string[]): Promise<Document[]> {
-  const documents: Document[] = [];
-  console.log(chalk.blue(`Processing ${filePaths.length} document files...`));
-  for (const filePath of filePaths) {
-    const doc = await processDocumentFile(filePath);
-    if (doc) {
-      documents.push(doc);
-      console.log(chalk.gray(`Successfully processed and added: ${filePath}`));
-    }
+/**
+ * Processes an array of Markdown file paths into Documents
+ */
+async function loadDocs(paths: string[]) {
+  const docs: Document[] = [];
+  for (const p of paths) {
+    const d = await processFile(p);
+    if (d) docs.push(d);
   }
-  console.log(chalk.green(`Successfully loaded ${documents.length} documents.`));
-  return documents;
+  return docs;
 }
 
-async function generateDocumentEmbeddings(
-  docs: Document[],
-  extractor: FeatureExtractionPipeline
-): Promise<Float32Array[]> {
-  console.log(chalk.blue(`Generating embeddings for ${docs.length} documents...`));
-  if (docs.length === 0) {
-    console.log(chalk.yellow('No documents to generate embeddings for.'));
-    return [];
-  }
-  const documentTexts = docs.map(doc => doc.content);
-
-  const embeddingsOutput = (await extractor(documentTexts, {
-    pooling: 'mean',
-    normalize: true,
-  })) as unknown as EmbeddingOutput; // Cast to unknown first, then to EmbeddingOutput
-
-  console.log(chalk.green('Embeddings generated.'));
-
-  // Add a check for the dimensions length
-  if (!embeddingsOutput.dims || embeddingsOutput.dims.length < 2) {
-    console.error(chalk.red('Embeddings output does not have the expected dimensions.'));
-    return [];
-  }
-
-  const numDocsOutput = embeddingsOutput.dims[0];
-  const embeddingDim = embeddingsOutput.dims[1];
-
-  if (numDocsOutput !== docs.length) {
-    console.error(chalk.red(`Mismatch between number of documents (${docs.length}) and embeddings generated (${numDocsOutput}).`));
-    // Potentially throw an error here or return empty, depending on desired robustness
-    return [];
-  }
-
-  const allEmbeddings: Float32Array[] = [];
-  for (let i = 0; i < numDocsOutput; i++) {
-    allEmbeddings.push(
-      embeddingsOutput.data.slice(i * embeddingDim, (i + 1) * embeddingDim) as Float32Array
-    );
-  }
-  return allEmbeddings;
+/**
+ * Generates vector embeddings for each document's plain text.
+ * - Uses HuggingFace model
+ * - Normalizes each vector for fast cosine similarity search
+ */
+async function embedDocs(docs: Document[], extractor: FeatureExtractionPipeline) {
+  if (!docs.length) return [];
+  // Don't let the model normalize, we do it manually for safety
+  const res = await extractor(docs.map(d => d.content), { pooling: 'mean', normalize: false }) as any;
+  const [n, dim] = res.dims;
+  // Each embedding vector is normalized for performance
+  return Array.from({ length: n }, (_, i) => normalize(res.data.slice(i * dim, (i + 1) * dim)));
 }
 
-function calculateSingleDocSimilarities(
-  sourceDocIndex: number,
-  allDocuments: Document[],
-  allEmbeddings: Float32Array[],
-  topN: number
-): SimilarityResult[] {
-  const sourceEmbedding = allEmbeddings[sourceDocIndex];
-  const similarities: SimilarityResult[] = [];
-
-  for (let j = 0; j < allDocuments.length; j++) {
-    if (sourceDocIndex === j) continue; // Don't compare a document with itself
-
-    const targetDoc = allDocuments[j];
-    const targetEmbedding = allEmbeddings[j];
-    const similarityScore = cosineSimilarity(sourceEmbedding, targetEmbedding);
-
-    const similarityEntry: SimilarityResult = {
-      ...targetDoc.frontmatter, // Spread frontmatter of the target document
-      path: targetDoc.path,     // Override path to be the target document's path
-      similarity: parseFloat(similarityScore.toFixed(2)), // Add similarity score
-    };
-    similarities.push(similarityEntry);
-  }
-
-  similarities.sort((a, b) => b.similarity - a.similarity);
-  return similarities.slice(0, topN);
+/**
+ * Computes the top-N most similar documents for the given document index.
+ * - Uses dot product of normalized vectors for cosine similarity
+ * - Returns only the top-N
+ */
+function topSimilar(idx: number, docs: Document[], embs: Float32Array[], n: number): SimilarityResult[] {
+  return docs.map((d, j) => j === idx ? null : ({
+    ...d.frontmatter, path: d.path,
+    similarity: +dot(embs[idx], embs[j]).toFixed(2) // higher = more similar
+  }))
+    .filter(Boolean)
+    .sort((a, b) => (b as any).similarity - (a as any).similarity)
+    .slice(0, n) as SimilarityResult[];
 }
 
-function computeAllSimilarities(
-  documents: Document[],
-  embeddings: Float32Array[],
-  topN: number
-): Record<string, SimilarityResult[]> {
-  const resultsBySlug: Record<string, SimilarityResult[]> = {};
-  console.log(chalk.blue(`Calculating similarities for ${documents.length} documents...`));
-
-  documents.forEach((doc, i) => {
-    const sourceSlug = doc.frontmatter.slug;
-    const topSimilarDocs = calculateSingleDocSimilarities(i, documents, embeddings, topN);
-    resultsBySlug[sourceSlug] = topSimilarDocs;
-    console.log(chalk.gray(`Processed similarities for: ${sourceSlug} (${i + 1}/${documents.length})`));
-  });
-
-  console.log(chalk.green('All similarity calculations complete.'));
-  return resultsBySlug;
+/**
+ * Computes all similarities for every document, returns as {slug: SimilarityResult[]} map.
+ */
+function allSimilarities(docs: Document[], embs: Float32Array[], n: number) {
+  return Object.fromEntries(docs.map((d, i) => [d.frontmatter.slug, topSimilar(i, docs, embs, n)]));
 }
 
-async function saveResultsToFile(
-  results: Record<string, SimilarityResult[]>,
-  outputFilePath: string
-): Promise<void> {
-  console.log(chalk.blue(`Attempting to save similarity results to ${outputFilePath}...`));
+/**
+ * Saves result object as JSON file.
+ * - Ensures output directory exists.
+ */
+async function saveJson(obj: any, out: string) {
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, JSON.stringify(obj, null, 2));
+}
+
+// --------- Main Execution Flow ---------
+async function main() {
   try {
-    const outputDir = path.dirname(outputFilePath);
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-      console.log(chalk.gray(`Created directory: ${outputDir}`));
-    }
-    fs.writeFileSync(outputFilePath, JSON.stringify(results, null, 2));
-    console.log(chalk.green.bold(`Successfully saved similarity results to: ${outputFilePath}`));
-  } catch (error) {
-    console.error(chalk.red.bold(`Error writing similarity results to file ${outputFilePath}:`), error);
-    throw error; // Re-throw to be caught by the main error handler
+    // 1. Load transformer model for embeddings
+    const extractor = await pipeline('feature-extraction', MODEL) as FeatureExtractionPipeline;
+
+    // 2. Find all Markdown files
+    const files = await glob(GLOB);
+    if (!files.length) return console.log(chalk.yellow('No content files found.'));
+
+    // 3. Parse and process all files
+    const docs = await loadDocs(files);
+    if (!docs.length) return console.log(chalk.red('No documents loaded.'));
+
+    // 4. Generate & normalize embeddings
+    const embs = await embedDocs(docs, extractor);
+    if (!embs.length) return console.log(chalk.red('No embeddings.'));
+
+    // 5. Calculate similarities for each doc
+    const results = allSimilarities(docs, embs, TOP_N);
+
+    // 6. Save results to disk
+    await saveJson(results, OUT);
+    console.log(chalk.green(`Similarity results saved to ${OUT}`));
+  } catch (e) {
+    console.error(chalk.red('Error:'), e);
+    process.exitCode = 1;
   }
 }
 
-async function initializeFeatureExtractor(): Promise<FeatureExtractionPipeline> {
-  console.log(chalk.blue(`Initializing feature extractor model (${FEATURE_EXTRACTOR_MODEL_NAME})...`));
-  const extractorInstance = await pipeline('feature-extraction', FEATURE_EXTRACTOR_MODEL_NAME);
-  console.log(chalk.green('Feature extractor initialized successfully.'));
-  return extractorInstance;
-}
-
-
-
-runSimilarityAnalysis();
-
-
+main();
