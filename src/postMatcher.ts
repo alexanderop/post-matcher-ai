@@ -132,7 +132,7 @@ async function saveJson(obj: any, out: string) {
 async function main() {
   try {
     // 1. Load transformer model for embeddings
-    const extractor = await pipeline('feature-extraction', MODEL) as FeatureExtractionPipeline;
+    const extractor = await pipeline('feature-extraction', MODEL);
 
     // 2. Find all Markdown files
     const files = await glob(GLOB);
